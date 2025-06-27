@@ -82,25 +82,16 @@
     return wrap;
   }
 
-  async function refresh(){
-    try {
-      const res = await fetch(API);
-      if (!res.ok) throw new Error(res.status);
-      const j = await res.json();
-      document.getElementById("mkt-status").textContent = "(" + j.market_status + ")";
-      document.getElementById("mkt-note").textContent = j.note;
-      document.getElementById("mkt-ts").textContent = "Updated: " + new Date(j.timestamp*1000).toLocaleTimeString();
-      const out = document.getElementById("mkt-tables");
-      out.innerHTML = "";
-      out.appendChild(buildTable(j.high_float, "High-Float Momentum"));
-      out.appendChild(buildTable(j.low_float, "Low-Float Momentum"));
-    } catch(e) {
-      console.error(e);
-      document.getElementById("mkt-tables").innerHTML = '<div class="no-data">Error loading data</div>';
-    }
+  function renderWidget(j){
+    document.getElementById("mkt-status").textContent = "(" + j.market_status + ")";
+    document.getElementById("mkt-note").textContent = j.note;
+    document.getElementById("mkt-ts").textContent = "Updated: " + new Date(j.timestamp*1000).toLocaleTimeString();
+    const out = document.getElementById("mkt-tables");
+    out.innerHTML = "";
+    out.appendChild(buildTable(j.high_float, "High-Float Momentum"));
+    out.appendChild(buildTable(j.low_float, "Low-Float Momentum"));
   }
 
-  // On page load
   document.addEventListener("DOMContentLoaded", function(){
     const container = document.getElementById("momentum-widget");
     if (!container) return;
@@ -135,7 +126,12 @@
     `;
     document.head.appendChild(style);
 
-    refresh();
-    setInterval(refresh, 60000);
+    // single fetch, no timer
+    fetch(API)
+      .then(res => res.ok ? res.json() : Promise.reject(res.status))
+      .then(data => renderWidget(data))
+      .catch(() => {
+        document.getElementById("mkt-tables").innerHTML = '<div class="no-data">Error loading data</div>';
+      });
   });
 })();
