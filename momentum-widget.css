@@ -1,0 +1,26 @@
+#momentum-widget {
+  font-family: system-ui, sans-serif;
+  padding: 1rem;
+  background-color: #ffffff;
+  border: 1px solid #ccc;
+  border-radius: 6px;
+  max-width: 800px;
+  margin: 0 auto;
+}
+
+#momentum-widget table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+#momentum-widget th,
+#momentum-widget td {
+  padding: 0.5rem;
+  border: 1px solid #ddd;
+  text-align: left;
+}
+
+#momentum-widget th {
+  background-color: #f2f2f2;
+  font-weight: 600;
+}
