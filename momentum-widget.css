@@ -1,3 +1,14 @@
+/* ==========================================================================
+   Momentum Widget Stylesheet
+   ========================================================================== */
+
+/* 1. Prevent nested bidi issues by isolating every div */
+div {
+  display: block;
+  unicode-bidi: isolate;
+}
+
+/* 2. Center the widget, set system font, and max width */
 #momentum-widget {
   font-family: system-ui, sans-serif;
   padding: 1rem;
@@ -5,6 +16,7 @@
   max-width: 1000px;
 }
 
+/* 3. Table styling for clean, responsive data */
 #momentum-widget table {
   width: 100%;
   border-collapse: collapse;
@@ -28,36 +40,18 @@
   background: #f5f5f5;
 }
 
-.green-dark {
-  background: #2e7d32;
-  color: #fff;
-}
+/* 4. Heatmap cell backgrounds */
+.heat-red    { background: #651111; }
+.heat-orange { background: #954b00; }
+.heat-yellow { background: #caa500; }
+.heat-green  { background: #2e7d32; color: #fff; }
+.heat-blue   { background: #004cff; color: #fff; }
 
-.green-bright {
-  background: #76ff03;
-  color: #000;
-}
+/* Alternate green classes */
+.green-dark   { background: #2e7d32; color: #fff; }
+.green-bright { background: #76ff03; color: #000; }
 
-.heat-red {
-  background: #651111;
-}
-
-.heat-orange {
-  background: #954b00;
-}
-
-.heat-yellow {
-  background: #caa500;
-}
-
-.heat-green {
-  background: #2e7d32;
-}
-
-.heat-blue {
-  background: #004cff;
-}
-
+/* 5. “No data” message styling */
 .no-data {
   padding: 1rem;
   color: #f90;
