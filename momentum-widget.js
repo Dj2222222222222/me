@@ -12,7 +12,7 @@
     return isNaN(v)
       ? '–'
       : v >= 1e6
-        ? (v/1e6).toFixed(1) + ' Mil'
+        ? (v / 1e6).toFixed(1) + ' Mil'
         : Number(v).toLocaleString();
   }
 
@@ -57,7 +57,8 @@
     }
 
     const tbl = document.createElement('table');
-    const trh = tbl.createTHead().insertRow();
+    const thead = tbl.createTHead();
+    const trh = thead.insertRow();
     const headers = [
       'Strategy','Time','Type','Symbol','Price',
       'Chg','Gap %','Vol','FLOAT/shares','VWAP','Entry'
@@ -69,27 +70,33 @@
     });
 
     const tbody = tbl.createTBody();
-    const fields = [
-      'price','change_from_open','gap_pct',
-      'volume','float','vwap','entry_trigger'
-    ];
     data.forEach(r => {
       const tr = tbody.insertRow();
       const cells = [
-        r.strategy || '',
+        r.strategy || '—',
         r.timestamp
-          ? new Date(r.timestamp * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-          : r.time || '',
-        arrow(r.change_from_open || r.change_pct),
+          ? new Date(r.timestamp * 1000).toLocaleTimeString([], { hour:'2-digit', minute:'2-digit' })
+          : r.time || '—',
+        arrow(r.change_from_open ?? r.change_pct ?? 0),
         r.ticker,
         fmt(r.price),
-        fmt(r.change_from_open || r.change_pct),
+        fmt(r.change_from_open ?? r.change_pct),
         fmt(r.gap_pct, 1),
         abbrMil(r.volume),
         abbrMil(r.float),
         fmt(r.vwap),
         r.entry_trigger || ''
       ];
+
+      const fieldMap = {
+        4: 'price',
+        5: 'change_from_open',
+        6: 'gap_pct',
+        7: 'volume',
+        8: 'float',
+        9: 'vwap',
+        10: 'rvol'  // fallback for heat only
+      };
 
       cells.forEach((val, i) => {
         const td = tr.insertCell();
@@ -99,9 +106,9 @@
             ? 'green-bright'
             : 'green-dark';
         } else {
-          const fieldKeys = ['price','change_from_open','gap_pct','volume','float','vwap','entry_trigger'];
-          const rawField = fieldKeys[i - 4];
-          const heat = getHeat(r[rawField] || r.rvol, rawField);
+          const field = fieldMap[i];
+          const raw = r[field] ?? r.change_pct ?? r.rvol ?? 0;
+          const heat = getHeat(raw, field);
           if (heat) td.classList.add(heat);
         }
       });
