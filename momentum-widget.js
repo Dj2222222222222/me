@@ -1,11 +1,9 @@
 (function(){
-  // 1. Configure API endpoint with bucket query-param
   const API_BASE = 'https://myze-thya.onrender.com';
   const params   = new URLSearchParams(window.location.search);
   const BUCKET   = params.get('bucket') || 'low';
   const ENDPOINT = `${API_BASE}/momentum/${BUCKET}`;
 
-  // 2. Helpers for arrows, number formatting, and heatmap
   function arrow(v) {
     return v > 0 ? '↑' : v < 0 ? '↓' : '→';
   }
@@ -27,7 +25,7 @@
   }
 
   function getHeat(val, field) {
-    if (field === 'rvol_value') {
+    if (field === 'rvol' || field === 'rvol_value') {
       return val >= 5 ? 'heat-blue'
            : val >= 2 ? 'heat-green'
            : val >= 1 ? 'heat-yellow'
@@ -44,7 +42,6 @@
     return '';
   }
 
-  // 3. Build a single table from data + title
   function buildTable(data, title) {
     const wrap = document.createElement('div');
     const h2 = document.createElement('h2');
@@ -60,8 +57,7 @@
     }
 
     const tbl = document.createElement('table');
-    const thead = tbl.createTHead();
-    const trh = thead.insertRow();
+    const trh = tbl.createTHead().insertRow();
     const headers = [
       'Strategy','Time','Type','Symbol','Price',
       'Chg','Gap %','Vol','FLOAT/shares','VWAP','Entry'
@@ -80,32 +76,32 @@
     data.forEach(r => {
       const tr = tbody.insertRow();
       const cells = [
-        r.strategy,
-        new Date(r.timestamp * 1000)
-          .toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'}),
-        arrow(r.change_from_open),
+        r.strategy || '',
+        r.timestamp
+          ? new Date(r.timestamp * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+          : r.time || '',
+        arrow(r.change_from_open || r.change_pct),
         r.ticker,
         fmt(r.price),
-        fmt(r.change_from_open),
+        fmt(r.change_from_open || r.change_pct),
         fmt(r.gap_pct, 1),
         abbrMil(r.volume),
         abbrMil(r.float),
         fmt(r.vwap),
-        r.entry_trigger
+        r.entry_trigger || ''
       ];
 
       cells.forEach((val, i) => {
         const td = tr.insertCell();
         td.textContent = val;
         if (i < 4) {
-          // first 4 cols get green theme based on strategy
           td.className = r.strategy === 'LOW-M'
             ? 'green-bright'
             : 'green-dark';
         } else {
-          // next cols get heatmap classes
-          const raw = r[fields[i - 4]] || 0;
-          const heat = getHeat(raw, fields[i - 4]);
+          const fieldKeys = ['price','change_from_open','gap_pct','volume','float','vwap','entry_trigger'];
+          const rawField = fieldKeys[i - 4];
+          const heat = getHeat(r[rawField] || r.rvol, rawField);
           if (heat) td.classList.add(heat);
         }
       });
@@ -115,22 +111,25 @@
     return wrap;
   }
 
-  // 4. Populate the widget DOM
   function renderWidget(j) {
-    document.getElementById('mkt-status').textContent =
-      `(${j.market_status})`;
+    document.getElementById('mkt-status').textContent = `(${j.market_status})`;
     document.getElementById('mkt-note').textContent = j.note;
     document.getElementById('mkt-ts').textContent =
-      'Updated: ' + new Date(j.timestamp * 1000)
-        .toLocaleTimeString();
+      'Updated: ' + new Date(j.timestamp * 1000).toLocaleTimeString();
 
     const out = document.getElementById('mkt-tables');
     out.innerHTML = '';
-    out.appendChild(buildTable(j.high_float, 'High-Float Momentum'));
-    out.appendChild(buildTable(j.low_float, 'Low-Float Momentum'));
+
+    if (BUCKET === 'low') {
+      out.appendChild(buildTable(j.low_float, 'Low-Float Momentum'));
+    } else if (BUCKET === 'high') {
+      out.appendChild(buildTable(j.high_float, 'High-Float Momentum'));
+    } else {
+      out.appendChild(buildTable(j.high_float, 'High-Float Momentum'));
+      out.appendChild(buildTable(j.low_float, 'Low-Float Momentum'));
+    }
   }
 
-  // 5. Fetch & retry every minute
   async function refresh() {
     try {
       const res = await fetch(ENDPOINT);
@@ -146,7 +145,6 @@
     }
   }
 
-  // 6. Kickoff on DOM loaded + polling
   document.addEventListener('DOMContentLoaded', () => {
     refresh();
     setInterval(refresh, 60_000);
