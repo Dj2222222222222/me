@@ -1,10 +1,10 @@
 (async function () {
   const API_BASE = 'https://myze-thya.onrender.com';
   const FMP_API = 'https://financialmodelingprep.com/api/v3/historical-chart/1min/';
+  const FMP_KEY = 'IjUxySjnW5a5WbVIQkDzBpXRceYhXiDx';
   const params = new URLSearchParams(window.location.search);
   const BUCKET = params.get('bucket') || 'low';
   const ENDPOINT = `${API_BASE}/momentum/${BUCKET}`;
-  const FMP_KEY = 'IjUxySjnW5a5WbVIQkDzBpXRceYhXiDx';
 
   async function fetchVWAP(ticker) {
     try {
@@ -49,12 +49,58 @@
     return isNaN(v) ? '—' : Number(v).toLocaleString(undefined, { maximumFractionDigits: d });
   }
 
-  function getHeat(val, field) {
-    if (field === 'vwap_deviation') {
-      const absDev = Math.abs(val);
-      if (absDev < 0.2) return 'heat-yellow';
-      return val > 0 ? 'heat-green' : 'heat-red';
+  function renderHeader(meta) {
+    document.getElementById('mkt-status').textContent = `(${meta.market_status})`;
+    document.getElementById('mkt-note').textContent = meta.note;
+    document.getElementById('mkt-ts').textContent =
+      'Updated: ' + new Date(meta.timestamp * 1000).toLocaleTimeString();
+  }
+  function getColor(val, field) {
+    if (field === 'change_from_open') {
+      if (val <= -50) return 'dark-red';
+      if (val <= -10) return 'medium-red';
+      if (val < 0) return 'light-red';
+      if (val === 0) return 'white';
+      if (val < 5) return 'light-green';
+      if (val < 15) return 'medium-green';
+      if (val < 30) return 'bright-green';
+      return 'dark-green';
     }
+
+    if (field === 'gap_pct') {
+      if (val < 0) return 'light-red';
+      if (val < 5) return 'white';
+      if (val < 15) return 'light-yellow';
+      if (val < 30) return 'yellow';
+      if (val < 50) return 'orange';
+      if (val < 100) return 'dark-orange';
+      return 'red-orange';
+    }
+
+    if (field === 'volume') {
+      if (val < 500_000) return 'gray';
+      if (val < 2_000_000) return 'light-green';
+      if (val < 5_000_000) return 'medium-green';
+      if (val < 10_000_000) return 'bright-green';
+      if (val < 50_000_000) return 'dark-green';
+      return 'highlight-blue';
+    }
+
+    if (field === 'float_pct') {
+      if (val < 5) return 'gray';
+      if (val < 10) return 'light-blue';
+      if (val < 20) return 'medium-blue';
+      if (val < 50) return 'bright-blue';
+      return 'dark-blue';
+    }
+
+    if (field === 'atr') {
+      if (val < 0.5) return 'light-gray';
+      if (val < 1.0) return 'yellow';
+      if (val < 2.0) return 'orange';
+      return 'red';
+    }
+
     return '';
   }
 
@@ -76,7 +122,7 @@
     const trh = tbl.createTHead().insertRow();
     const headers = [
       'Strategy', 'Time', 'Type', 'Symbol', 'Price',
-      'Chg', 'Gap %', 'Vol', 'FLOAT', 'VWAP', 'Entry'
+      'Chg %', 'Gap %', 'Volume', '% Float', 'ATR', 'VWAP', 'Entry'
     ];
     headers.forEach(label => {
       const th = document.createElement('th');
@@ -88,14 +134,16 @@
 
     for (const r of data) {
       const tr = tbody.insertRow();
+      const price = r.price ?? 0;
       const timestamp = r.timestamp
         ? new Date(r.timestamp * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-        : r.time ?? '—';
+        : new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
-      const price = r.price ?? 0;
       const vwap = await fetchVWAP(r.ticker);
       const deviation = vwap ? ((price - vwap) / vwap) * 100 : null;
-      const rvol = r.rvol ?? r.rvol_value ?? 0;
+      const rvol = r.rvol ?? r.rvol_value ?? null;
+      const atr = r.atr ?? null;
+      const floatPct = r.float && r.volume ? (r.volume / r.float * 100) : null;
 
       let signal = '—';
       if (vwap) {
@@ -108,16 +156,25 @@
         }
       }
 
+      const fields = {
+        5: { val: r.change_from_open ?? 0, key: 'change_from_open' },
+        6: { val: r.gap_pct ?? 0, key: 'gap_pct' },
+        7: { val: r.volume ?? 0, key: 'volume' },
+        8: { val: floatPct ?? 0, key: 'float_pct' },
+        9: { val: atr ?? 0, key: 'atr' }
+      };
+
       const cells = [
         r.strategy ?? strategyLabel,
         timestamp,
         arrow(r.change_from_open ?? r.change_pct ?? 0),
         r.ticker ?? '—',
         fmt(price),
-        fmt(r.change_from_open ?? r.change_pct),
-        fmt(r.gap_pct, 1),
-        abbrMil(r.volume),
-        abbrMil(r.float),
+        fmt(fields[5].val),
+        fmt(fields[6].val, 1),
+        abbrMil(fields[7].val),
+        fmt(fields[8].val, 1),
+        fmt(fields[9].val),
         vwap ? fmt(vwap) : '—',
         signal
       ];
@@ -127,21 +184,14 @@
         td.textContent = val;
         if (i < 4) {
           td.className = strategyLabel === 'LOW' ? 'green-bright' : 'green-dark';
-        } else if (i === 10 && deviation !== null) {
-          td.classList.add(getHeat(deviation, 'vwap_deviation'));
+        } else if (fields[i]) {
+          td.classList.add(getColor(fields[i].val, fields[i].key));
         }
       });
     }
 
     wrap.appendChild(tbl);
     return wrap;
-  }
-
-  function renderHeader(meta) {
-    document.getElementById('mkt-status').textContent = `(${meta.market_status})`;
-    document.getElementById('mkt-note').textContent = meta.note;
-    document.getElementById('mkt-ts').textContent =
-      'Updated: ' + new Date(meta.timestamp * 1000).toLocaleTimeString();
   }
 
   async function renderWidget(j) {
