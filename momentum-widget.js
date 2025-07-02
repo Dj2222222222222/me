@@ -4,7 +4,7 @@
   const params = new URLSearchParams(window.location.search);
   const BUCKET = params.get('bucket') || 'low';
   const ENDPOINT = `${API_BASE}/momentum/${BUCKET}`;
-  const FMP_KEY = 'YOUR_API_KEY_HERE'; // 🔁 Replace with your real FMP key
+  const FMP_KEY = 'IjUxySjnW5a5WbVIQkDzBpXRceYhXiDx'; // ✅ LIVE KEY IN PLACE
 
   async function fetchVWAP(ticker) {
     try {
@@ -12,7 +12,7 @@
       const candles = await res.json();
       if (!Array.isArray(candles) || candles.length === 0) return null;
 
-      // Detect the most recent full trading date
+      // Use most recent full session
       const dateCounts = {};
       candles.forEach(bar => {
         const d = bar.date.split(" ")[0];
@@ -20,11 +20,11 @@
       });
       const sortedDates = Object.entries(dateCounts)
         .sort((a, b) => b[0].localeCompare(a[0]));
-      const recentValidDate = sortedDates.find(([_, count]) => count > 50)?.[0]; // arbitrary threshold
+      const recentDate = sortedDates.find(([_, count]) => count > 50)?.[0];
 
       let tpv = 0, totalVol = 0;
       candles
-        .filter(bar => bar.date.startsWith(recentValidDate))
+        .filter(bar => bar.date.startsWith(recentDate))
         .forEach(bar => {
           const tp = (bar.high + bar.low + bar.close) / 3;
           tpv += tp * bar.volume;
