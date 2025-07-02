@@ -1,26 +1,32 @@
+// server.js
 import 'dotenv/config';
 import express from 'express';
-import path    from 'path';
-import momentumRouter from './routes/momentum.js';
+import cors from 'cors';
+import path from 'path';
+import momentumRouter from './routes/momentum.js';  // ← fixed quote + semicolon
 
 const app = express();
-const __dirname = path.resolve();
 
+// 1) Enable CORS so GHL (and any client) can fetch your API
+app.use(cors());
+
+// 2) Parse JSON bodies
 app.use(express.json());
 
-// Mount your momentum API
+// 3) Mount your momentum API under /momentum
 app.use('/momentum', momentumRouter);
 
-// Serve static assets (widget, HTML, CSS, JS)
+// 4) Serve static assets (index.html, CSS, JS) from your project root
+const __dirname = path.resolve();
 app.use(express.static(__dirname));
 
-// Default to index.html
-app.get('/', (req, res) => {
+// 5) (Optional) Fallback to index.html on unknown routes
+app.get('*', (req, res) => {
   res.sendFile(path.join(__dirname, 'index.html'));
 });
 
-// Start server
+// 6) Start server
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
-  console.log(`🚀 Server running on http://localhost:${PORT}`);
+  console.log(`🚀 Server listening on port ${PORT}`);
 });
