@@ -5,15 +5,26 @@
   const BUCKET        = params.get('bucket') || 'low';
   const ENDPOINT      = `${API_BASE}/momentum/${BUCKET}`;
 
-  // Intraday 1-min & EOD full-history endpoints
   const INTRADAY_V3   = 'https://financialmodelingprep.com/api/v3/historical-chart/1min/';
   const EOD_FULL      = 'https://financialmodelingprep.com/api/v3/historical-price-eod/full?symbol=';
 
-  // Fetch VWAP & per-ticker time (intraday when available; fallback to EOD)
+  async function fetchOpenClose(ticker) {
+    try {
+      const arr = await fetch(`${EOD_FULL}${ticker}&apikey=${FMP_KEY}`)
+                        .then(r => r.json());
+      if (Array.isArray(arr) && arr.length) {
+        return { open: arr[0].open, close: arr[0].close };
+      }
+    } catch (e) {
+      console.warn(`Open/Close error for ${ticker}`, e);
+    }
+    return { open: null, close: null };
+  }
+
   async function fetchVWAPandTime(ticker) {
     try {
-      const res1 = await fetch(`${INTRADAY_V3}${ticker}?apikey=${FMP_KEY}`);
-      const bars = await res1.json();
+      const bars = await fetch(`${INTRADAY_V3}${ticker}?apikey=${FMP_KEY}`)
+                        .then(r => r.json());
       if (Array.isArray(bars) && bars.length > 20) {
         const today = bars[0].date.split(' ')[0];
         let tpv = 0, vol = 0;
@@ -27,19 +38,16 @@
         const last = bars[bars.length - 1];
         return {
           vwap: vol ? tpv / vol : null,
-          time: new Date(last.date).toLocaleTimeString([], {
-            hour: '2-digit', minute: '2-digit'
-          })
+          time: new Date(last.date)
+                  .toLocaleTimeString([], { hour:'2-digit', minute:'2-digit' })
         };
       }
-
-      // Fallback to EOD full history
-      const res2 = await fetch(`${EOD_FULL}${ticker}&apikey=${FMP_KEY}`);
-      const arr  = await res2.json();
-      if (Array.isArray(arr) && arr.length) {
+      const hist = await fetch(`${EOD_FULL}${ticker}&apikey=${FMP_KEY}`)
+                        .then(r => r.json());
+      if (Array.isArray(hist) && hist.length) {
         return {
-          vwap: arr[0].vwap ?? null,
-          time: `EOD ${arr[0].date}`
+          vwap: hist[0].vwap ?? null,
+          time: `EOD ${hist[0].date}`
         };
       }
     } catch (e) {
@@ -48,11 +56,9 @@
     return { vwap: null, time: '—' };
   }
 
-  // Formatting & color utilities
   function fmt(v, d = 2) {
-    return isNaN(v) ? '—' : Number(v).toLocaleString(undefined, {
-      maximumFractionDigits: d
-    });
+    return isNaN(v) ? '—'
+      : Number(v).toLocaleString(undefined, { maximumFractionDigits: d });
   }
   function abbrMil(v) {
     return isNaN(v) ? '—'
@@ -106,13 +112,12 @@
     return '';
   }
 
-  // Render header (market status, note, last update)
   function renderHeader(meta) {
     document.getElementById('mkt-status').textContent = `(${meta.market_status})`;
     document.getElementById('mkt-note'  ).textContent = meta.note;
     document.getElementById('mkt-ts'    ).textContent =
       'Updated: ' + new Date(meta.timestamp * 1000)
-        .toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        .toLocaleTimeString([], { hour:'2-digit', minute:'2-digit' });
   }
   async function buildTable(data, title, strategyLabel) {
     const wrap = document.createElement('div');
@@ -128,7 +133,6 @@
       return wrap;
     }
 
-    // Build table header
     const tbl    = document.createElement('table');
     const trh    = tbl.createTHead().insertRow();
     const labels = [
@@ -140,7 +144,6 @@
       th.textContent = l;
       trh.appendChild(th);
     });
-
     const tbody = tbl.createTBody();
 
     for (const r of data) {
@@ -153,8 +156,11 @@
       const gapPct   = r.gap_pct   || 0;
       const atr      = r.atr       || null;
 
-      // Fetch VWAP + per-ticker time
-      const { vwap, time: fetchedTime } = await fetchVWAPandTime(ticker);
+      // Fetch open/close (for fallback) and VWAP+Time
+      const [{ open, close }, { vwap, time: fetchedTime }] = await Promise.all([
+        fetchOpenClose(ticker),
+        fetchVWAPandTime(ticker)
+      ]);
 
       // 1) Time column
       const timeStr = fetchedTime;
@@ -162,17 +168,19 @@
       // 2) % Change from Open & Type arrow
       const changePct = typeof r.change_from_open === 'number'
         ? r.change_from_open
-        : null;
+        : (open != null
+           ? (( (r.price ?? close ?? 0) - open ) / open) * 100
+           : null);
       const typeArrow = changePct != null
         ? arrow(changePct)
         : '→';
 
-      // 3) Price (use r.price only)
-      const price = r.price ?? 0;
+      // 3) Price
+      const price = r.price ?? close ?? 0;
 
-      // 4) Deviation & entry signal
+      // 4) Deviation & Entry signal
       const deviation = (vwap != null)
-        ? ((price - vwap) / vwap) * 100
+        ? ( (price - vwap) / vwap ) * 100
         : null;
       const rvolVal = r.rvol ?? r.rvol_value ?? 0;
       let signal = '—';
@@ -185,31 +193,31 @@
           signal = 'Bounce Zone';
       }
 
-      // 5) Compose cells
+      // 5) Build cells
       const cells = [
-        strategy,            // 0
-        timeStr,             // 1 ← fixed
-        typeArrow,           // 2 ← fixed
-        ticker,              // 3
-        fmt(price),          // 4
-        fmt(changePct),      // 5 ← fixed
-        fmt(gapPct, 1),      // 6
-        abbrMil(vol),        // 7
-        fmt(floatPct, 1),    // 8
-        fmt(atr),            // 9
+        strategy,            //0
+        timeStr,             //1 ← fixed
+        typeArrow,           //2 ← fixed
+        ticker,              //3
+        fmt(price),          //4
+        fmt(changePct),      //5 ← fixed
+        fmt(gapPct, 1),      //6
+        abbrMil(vol),        //7
+        fmt(floatPct, 1),    //8
+        fmt(atr),            //9
         (typeof vwap === 'number' && !isNaN(vwap))
           ? fmt(vwap)
-          : '—',             // 10
-        signal               // 11
+          : '—',             //10
+        signal               //11
       ];
 
-      // 6) Color map for cols 5–10
+      // 6) Color‐map cols 5–10
       const colorMap = {
-        5: { val: changePct,   field: 'change' },
-        6: { val: gapPct,       field: 'gap_pct' },
-        7: { val: vol,          field: 'volume' },
-        8: { val: floatPct,     field: 'float_pct' },
-        9: { val: atr,          field: 'atr' }
+        5: { val: changePct, field: 'change' },
+        6: { val: gapPct,     field: 'gap_pct' },
+        7: { val: vol,        field: 'volume' },
+        8: { val: floatPct,   field: 'float_pct' },
+        9: { val: atr,        field: 'atr' }
       };
 
       // 7) Render row
