@@ -1,280 +1,182 @@
 (async function() {
-  const API_BASE      = 'https://myze-thya.onrender.com';
-  const FMP_KEY       = 'IjUxySjnW5a5WbVIQkDzBpXRceYhXiDx';
-  const params        = new URLSearchParams(window.location.search);
-  const BUCKET        = params.get('bucket') || 'low';
-  const ENDPOINT      = `${API_BASE}/momentum/${BUCKET}`;
+  const API_BASE = 'http://localhost:3000';
+  const BUCKET = new URLSearchParams(window.location.search).get('bucket') || 'low';
+  const ENDPOINT = `${API_BASE}/momentum/${BUCKET}`;
 
-  const INTRADAY_V3   = 'https://financialmodelingprep.com/api/v3/historical-chart/1min/';
-  const EOD_FULL      = 'https://financialmodelingprep.com/api/v3/historical-price-eod/full?symbol=';
-
-  async function fetchOpenClose(ticker) {
-    try {
-      const arr = await fetch(`${EOD_FULL}${ticker}&apikey=${FMP_KEY}`)
-                        .then(r => r.json());
-      if (Array.isArray(arr) && arr.length) {
-        return { open: arr[0].open, close: arr[0].close };
-      }
-    } catch (e) {
-      console.warn(`Open/Close error for ${ticker}`, e);
-    }
-    return { open: null, close: null };
-  }
-
-  async function fetchVWAPandTime(ticker) {
-    try {
-      const bars = await fetch(`${INTRADAY_V3}${ticker}?apikey=${FMP_KEY}`)
-                        .then(r => r.json());
-      if (Array.isArray(bars) && bars.length > 20) {
-        const today = bars[0].date.split(' ')[0];
-        let tpv = 0, vol = 0;
-        bars.forEach(b => {
-          if (b.date.startsWith(today)) {
-            const tp = (b.high + b.low + b.close) / 3;
-            tpv += tp * b.volume;
-            vol += b.volume;
-          }
-        });
-        const last = bars[bars.length - 1];
-        return {
-          vwap: vol ? tpv / vol : null,
-          time: new Date(last.date)
-                  .toLocaleTimeString([], { hour:'2-digit', minute:'2-digit' })
-        };
-      }
-      const hist = await fetch(`${EOD_FULL}${ticker}&apikey=${FMP_KEY}`)
-                        .then(r => r.json());
-      if (Array.isArray(hist) && hist.length) {
-        return {
-          vwap: hist[0].vwap ?? null,
-          time: `EOD ${hist[0].date}`
-        };
-      }
-    } catch (e) {
-      console.warn(`VWAP+Time error for ${ticker}`, e);
-    }
-    return { vwap: null, time: '—' };
-  }
-
-  function fmt(v, d = 2) {
-    return isNaN(v) ? '—'
-      : Number(v).toLocaleString(undefined, { maximumFractionDigits: d });
+  // Helpers
+  function fmt(v, d=2) {
+    return isNaN(v) ? '—' : Number(v).toLocaleString(undefined, { maximumFractionDigits: d });
   }
   function abbrMil(v) {
-    return isNaN(v) ? '—'
-      : v >= 1e6 ? (v / 1e6).toFixed(1) + ' Mil'
-      : Number(v).toLocaleString();
-  }
-  function arrow(v) {
-    return v > 0 ? '↑' : v < 0 ? '↓' : '→';
-  }
-  function getColor(val, fld) {
-    if (fld === 'change') {
-      if (val <= -50) return 'dark-red';
-      if (val <= -10) return 'medium-red';
-      if (val < 0) return 'light-red';
-      if (val === 0) return 'white';
-      if (val < 5) return 'light-green';
-      if (val < 15) return 'medium-green';
-      if (val < 30) return 'bright-green';
-      return 'dark-green';
-    }
-    if (fld === 'gap_pct') {
-      if (val < 0) return 'light-red';
-      if (val < 5) return 'white';
-      if (val < 15) return 'light-yellow';
-      if (val < 30) return 'yellow';
-      if (val < 50) return 'orange';
-      if (val < 100) return 'dark-orange';
-      return 'red-orange';
-    }
-    if (fld === 'volume') {
-      if (val < 500_000) return 'gray';
-      if (val < 2_000_000) return 'light-green';
-      if (val < 5_000_000) return 'medium-green';
-      if (val < 10_000_000) return 'bright-green';
-      if (val < 50_000_000) return 'dark-green';
-      return 'highlight-blue';
-    }
-    if (fld === 'float_pct') {
-      if (val < 5) return 'gray';
-      if (val < 10) return 'light-blue';
-      if (val < 20) return 'medium-blue';
-      if (val < 50) return 'bright-blue';
-      return 'dark-blue';
-    }
-    if (fld === 'atr') {
-      if (val < 0.5) return 'light-gray';
-      if (val < 1.0) return 'yellow';
-      if (val < 2.0) return 'orange';
-      return 'red';
-    }
-    return '';
+    if (isNaN(v)) return '—';
+    return v >= 1e6 ? (v/1e6).toFixed(1)+'M' : Number(v).toLocaleString();
   }
 
-  function renderHeader(meta) {
-    document.getElementById('mkt-status').textContent = `(${meta.market_status})`;
-    document.getElementById('mkt-note'  ).textContent = meta.note;
-    document.getElementById('mkt-ts'    ).textContent =
-      'Updated: ' + new Date(meta.timestamp * 1000)
-        .toLocaleTimeString([], { hour:'2-digit', minute:'2-digit' });
+  // Color palettes
+  const COLORS = {
+    darkRed: '#c82333', lightRed: '#f8d7da',
+    gray: '#e0e0e0', lightGreen: '#d4edda',
+    mediumGreen: '#a3d3a1', brightGreen: '#7cc47c',
+    darkGreen: '#3a6f3a', blue: '#007bff', yellow: '#ffeeba'
+  };
+
+  // Pick color key for numeric ranges
+  function pick(val, fld) {
+    switch(fld) {
+      case 'rvol':
+        if(val<1) return 'gray'; if(val<2) return 'lightGreen';
+        if(val<3) return 'mediumGreen'; if(val<5) return 'brightGreen';
+        return 'darkGreen';
+
+      case 'change':
+        if(val<=-50) return 'darkRed'; if(val<=-10) return 'lightRed';
+        if(val<0) return 'lightRed'; if(val===0) return 'gray';
+        if(val<5) return 'lightGreen'; if(val<15) return 'mediumGreen';
+        if(val<30) return 'brightGreen'; return 'darkGreen';
+
+      case 'gap':
+        if(val<=-5) return 'darkRed'; if(val< -1) return 'lightRed';
+        if(Math.abs(val)<1) return 'gray'; if(val<3) return 'lightGreen';
+        if(val<7) return 'brightGreen'; return 'blue';
+
+      case 'volume':
+        if(val<5e5) return 'gray'; if(val<2e6) return 'lightGreen';
+        if(val<5e6) return 'mediumGreen'; if(val<1e7) return 'brightGreen';
+        if(val<5e7) return 'darkGreen'; return 'blue';
+
+      case 'float_pct':
+        if(val<5) return 'gray'; if(val<10) return 'lightBlue';
+        if(val<20) return 'mediumBlue'; if(val<50) return 'brightBlue';
+        return 'darkBlue';
+
+      case 'atr':
+        if(val<0.5) return 'gray'; if(val<1) return 'yellow';
+        if(val<2) return 'brightGreen'; return 'darkRed';
+
+      // Price/VWAP deviation
+      case 'dev':
+        if(val<=-2) return 'darkRed'; if(val<=-0.5) return 'lightRed';
+        if(Math.abs(val)<=0.5) return 'gray'; if(val<=2) return 'lightGreen';
+        return 'brightGreen';
+    }
+    return null;
   }
-  async function buildTable(data, title, strategyLabel) {
+
+  // Render header
+  function renderHeader(m) {
+    document.getElementById('mkt-status').textContent=`(${m.market_status})`;
+    document.getElementById('mkt-note').textContent=m.note;
+    document.getElementById('mkt-ts').textContent=
+      'Updated: '+new Date(m.timestamp*1000).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'});
+  }
+
+  // Build table
+  async function buildTable(arr, title, strat) {
     const wrap = document.createElement('div');
-    const h2   = document.createElement('h2');
-    h2.textContent = title;
-    wrap.appendChild(h2);
-
-    if (!data.length) {
-      const nd = document.createElement('div');
-      nd.className = 'no-data';
-      nd.textContent = `No ${title} data`;
-      wrap.appendChild(nd);
+    wrap.appendChild(Object.assign(document.createElement('h2'), { textContent: title }));
+    if(!arr.length) {
+      const no = document.createElement('div');
+      no.className='no-data';
+      no.textContent=`No ${title}`;
+      wrap.appendChild(no);
       return wrap;
     }
+    const tbl = document.createElement('table');
+    const hdr = ['Strat','Time','Type','Symbol','Price','RVOL','Chg%','Gap%','Vol','Float','ATR','VWAP','Entry'];
+    const trh=tbl.createTHead().insertRow();
+    hdr.forEach(h=> trh.appendChild(Object.assign(document.createElement('th'),{textContent:h})));
 
-    const tbl    = document.createElement('table');
-    const trh    = tbl.createTHead().insertRow();
-    const labels = [
-      'Strategy','Time','Type','Symbol','Price',
-      'Chg %','Gap %','Volume','% Float','ATR','VWAP','Entry'
-    ];
-    labels.forEach(l => {
-      const th = document.createElement('th');
-      th.textContent = l;
-      trh.appendChild(th);
-    });
-    const tbody = tbl.createTBody();
+    const tbody=tbl.createTBody();
+    arr.forEach(r=>{
+      const tr=tbody.insertRow();
+      const dev = ((r.price-r.vwap)/r.vwap)*100;
+      const gap = r.gap_pct;
+      const floatPct = r.float? (r.volume/r.float)*100:0;
 
-    for (const r of data) {
-      const tr       = tbody.insertRow();
-      const ticker   = r.ticker    || '—';
-      const strategy = r.strategy  || strategyLabel;
-      const vol      = r.volume    || 0;
-      const flt      = r.float     || 0;
-      const floatPct = flt > 0 ? (vol / flt) * 100 : null;
-      const gapPct   = r.gap_pct   || 0;
-      const atr      = r.atr       || null;
-
-      // Fetch open/close (for fallback) and VWAP+Time
-      const [{ open, close }, { vwap, time: fetchedTime }] = await Promise.all([
-        fetchOpenClose(ticker),
-        fetchVWAPandTime(ticker)
-      ]);
-
-      // 1) Time column
-      const timeStr = fetchedTime;
-
-      // 2) % Change from Open & Type arrow
-      const changePct = typeof r.change_from_open === 'number'
-        ? r.change_from_open
-        : (open != null
-           ? (( (r.price ?? close ?? 0) - open ) / open) * 100
-           : null);
-      const typeArrow = changePct != null
-        ? arrow(changePct)
-        : '→';
-
-      // 3) Price
-      const price = r.price ?? close ?? 0;
-
-      // 4) Deviation & Entry signal
-      const deviation = (vwap != null)
-        ? ( (price - vwap) / vwap ) * 100
-        : null;
-      const rvolVal = r.rvol ?? r.rvol_value ?? 0;
-      let signal = '—';
-      if (deviation != null) {
-        if (Math.abs(deviation) > 2)
-          signal = deviation > 0 ? 'Short Reversion' : 'Long Reversion';
-        else if (rvolVal > 2)
-          signal = price > vwap ? 'Long Bias' : 'Short Bias';
-        else if (Math.abs(deviation) < 0.2)
-          signal = 'Bounce Zone';
-      }
-
-      // 5) Build cells
-      const cells = [
-        strategy,            //0
-        timeStr,             //1 ← fixed
-        typeArrow,           //2 ← fixed
-        ticker,              //3
-        fmt(price),          //4
-        fmt(changePct),      //5 ← fixed
-        fmt(gapPct, 1),      //6
-        abbrMil(vol),        //7
-        fmt(floatPct, 1),    //8
-        fmt(atr),            //9
-        (typeof vwap === 'number' && !isNaN(vwap))
-          ? fmt(vwap)
-          : '—',             //10
-        signal               //11
+      const vals = [
+        strat, r.time, r.type, r.ticker,
+        fmt(r.price),
+        fmt(r.rvol,1),
+        fmt(r.change_from_open),
+        fmt(gap,1),
+        abbrMil(r.volume),
+        abbrMil(r.float),
+        fmt(r.atr),
+        fmt(r.vwap),
+        r.entry
       ];
 
-      // 6) Color‐map cols 5–10
-      const colorMap = {
-        5: { val: changePct, field: 'change' },
-        6: { val: gapPct,     field: 'gap_pct' },
-        7: { val: vol,        field: 'volume' },
-        8: { val: floatPct,   field: 'float_pct' },
-        9: { val: atr,        field: 'atr' }
+      // column mapping to fld/picker
+      const fldMap = {
+        4:'dev',5:'rvol',6:'change',7:'gap',8:'volume',
+        9:'float_pct',10:'atr',11:'dev',12:'entry'
       };
 
-      // 7) Render row
-      cells.forEach((val, i) => {
-        const td = tr.insertCell();
-        td.textContent = val;
-        if (i < 4) {
-          td.className = strategy === 'LOW'
-            ? 'green-bright'
-            : 'green-dark';
-        } else if (colorMap[i]) {
-          const { val: V, field: F } = colorMap[i];
-          td.classList.add(getColor(V, F));
+      vals.forEach((v,i)=>{
+        const td=tr.insertCell();
+        td.textContent=v;
+
+        // static cols 0-3
+        if(i<4){ td.className = strat==='LOW'?'green-bright':'green-dark'; return;}
+        // Price (4) & VWAP (11)
+        if(i===4||i===11) {
+          const key=pick(dev,'dev');
+          td.style.background=COLORS[key];
+          td.style.color='#000';
+          return;
         }
+        // Entry (12)
+        if(i===12){
+          const e=r.entry;
+          const col=e.includes('Long')?'brightGreen':
+                    e.includes('Short')?'darkRed':
+                    e.includes('Reversion')?'yellow':'gray';
+          td.style.background=COLORS[col];
+          td.style.color='#000';
+          return;
+        }
+        // dynamic others
+        const fld = fldMap[i];
+        const num = fld==='float_pct'?floatPct: r[fld];
+        const key = pick(num,fld);
+        td.style.background=COLORS[key]||null;
+        td.style.color='#000';
       });
-    }
+    });
 
     wrap.appendChild(tbl);
     return wrap;
   }
 
-  async function renderWidget(json) {
-    renderHeader(json);
-    const out = document.getElementById('mkt-tables');
-    out.innerHTML = '';
-    if (BUCKET === 'raw') {
-      out.appendChild(await buildTable(
-        json.high_float, 'High-Float Momentum', 'HIGH'
-      ));
-      out.appendChild(await buildTable(
-        json.low_float, 'Low-Float Momentum', 'LOW'
-      ));
-    } else if (BUCKET === 'high') {
-      out.appendChild(await buildTable(
-        json.high_float, 'High-Float Momentum', 'HIGH'
-      ));
+  // Render
+  async function render(m) {
+    renderHeader(m);
+    const out=document.getElementById('mkt-tables'); out.innerHTML='';
+    if(BUCKET==='raw'){
+      out.appendChild(await buildTable(m.high_float,'High-Float Momentum','HIGH'));
+      out.appendChild(await buildTable(m.low_float,'Low-Float Momentum','LOW'));
+    } else if(BUCKET==='high'){
+      out.appendChild(await buildTable(m.high_float,'High-Float Momentum','HIGH'));
     } else {
-      out.appendChild(await buildTable(
-        json.low_float, 'Low-Float Momentum', 'LOW'
-      ));
+      out.appendChild(await buildTable(m.low_float,'Low-Float Momentum','LOW'));
     }
   }
 
-  async function refresh() {
-    try {
-      const res  = await fetch(ENDPOINT);
-      if (!res.ok) throw new Error(res.status);
-      const data = await res.json();
-      await renderWidget(data);
-    } catch {
-      document.getElementById('mkt-tables').innerHTML =
-        `<div class="no-data">No data available for bucket “${BUCKET}”</div>`;
+  // Refresh loop
+  async function refresh(){
+    try{
+      const r = await fetch(ENDPOINT);
+      if(!r.ok) throw new Error(r.statusText);
+      const j = await r.json();
+      await render(j);
+    } catch(e){
+      console.error(e);
+      document.getElementById('mkt-tables').innerHTML='<div class="no-data">No data</div>';
     }
   }
 
-  document.addEventListener('DOMContentLoaded', () => {
+  document.addEventListener('DOMContentLoaded', ()=>{
     refresh();
-    setInterval(refresh, 60000);
+    setInterval(refresh,60000);
   });
 })();
