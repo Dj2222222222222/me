@@ -4,7 +4,7 @@
   const params = new URLSearchParams(window.location.search);
   const BUCKET = params.get('bucket') || 'low';
   const ENDPOINT = `${API_BASE}/momentum/${BUCKET}`;
-  const FMP_KEY = 'IjUxySjnW5a5WbVIQkDzBpXRceYhXiDx'; // ✅ LIVE KEY IN PLACE
+  const FMP_KEY = 'IjUxySjnW5a5WbVIQkDzBpXRceYhXiDx';
 
   async function fetchVWAP(ticker) {
     try {
@@ -12,7 +12,6 @@
       const candles = await res.json();
       if (!Array.isArray(candles) || candles.length === 0) return null;
 
-      // Use most recent full session
       const dateCounts = {};
       candles.forEach(bar => {
         const d = bar.date.split(" ")[0];
@@ -32,7 +31,8 @@
         });
 
       return totalVol > 0 ? tpv / totalVol : null;
-    } catch {
+    } catch (err) {
+      console.warn(`VWAP fetch failed for ${ticker}:`, err);
       return null;
     }
   }
@@ -75,8 +75,8 @@
     const tbl = document.createElement('table');
     const trh = tbl.createTHead().insertRow();
     const headers = [
-      'Strategy','Time','Type','Symbol','Price',
-      'Chg','Gap %','Vol','FLOAT','VWAP','Entry'
+      'Strategy', 'Time', 'Type', 'Symbol', 'Price',
+      'Chg', 'Gap %', 'Vol', 'FLOAT', 'VWAP', 'Entry'
     ];
     headers.forEach(label => {
       const th = document.createElement('th');
@@ -88,7 +88,6 @@
 
     for (const r of data) {
       const tr = tbody.insertRow();
-
       const timestamp = r.timestamp
         ? new Date(r.timestamp * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
         : r.time ?? '—';
