@@ -10,15 +10,27 @@
     try {
       const res = await fetch(`${FMP_API}${ticker}?apikey=${FMP_KEY}`);
       const candles = await res.json();
-      let tpv = 0, totalVol = 0;
+      if (!Array.isArray(candles) || candles.length === 0) return null;
 
-      const today = new Date().toISOString().slice(0, 10);
-      for (const bar of candles) {
-        if (!bar.date.startsWith(today)) continue;
-        const tp = (bar.high + bar.low + bar.close) / 3;
-        tpv += tp * bar.volume;
-        totalVol += bar.volume;
-      }
+      // Detect the most recent full trading date
+      const dateCounts = {};
+      candles.forEach(bar => {
+        const d = bar.date.split(" ")[0];
+        dateCounts[d] = (dateCounts[d] || 0) + 1;
+      });
+      const sortedDates = Object.entries(dateCounts)
+        .sort((a, b) => b[0].localeCompare(a[0]));
+      const recentValidDate = sortedDates.find(([_, count]) => count > 50)?.[0]; // arbitrary threshold
+
+      let tpv = 0, totalVol = 0;
+      candles
+        .filter(bar => bar.date.startsWith(recentValidDate))
+        .forEach(bar => {
+          const tp = (bar.high + bar.low + bar.close) / 3;
+          tpv += tp * bar.volume;
+          totalVol += bar.volume;
+        });
+
       return totalVol > 0 ? tpv / totalVol : null;
     } catch {
       return null;
@@ -163,6 +175,6 @@
 
   document.addEventListener('DOMContentLoaded', () => {
     refresh();
-    setInterval(refresh, 60_000);
+    setInterval(refresh, 60000);
   });
 })();
