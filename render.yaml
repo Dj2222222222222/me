@@ -1,0 +1,10 @@
+services:
+  - type: web
+    name: momentum-widget
+    env: node
+    plan: free
+    buildCommand: npm install
+    startCommand: npm start
+    envVars:
+      - key: FMP_KEY
+        fromDatabase: FMP_KEY
