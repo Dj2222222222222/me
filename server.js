@@ -15,7 +15,7 @@ app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
 app.use('/momentum', momentumRouter);
 
-// Fallback for SPA
+// Fallback for SPA support (if you ever need index.html)
 app.use((req, res) =>
   res.sendFile(path.join(__dirname, 'public', 'index.html'))
 );
