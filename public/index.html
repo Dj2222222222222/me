@@ -1,12 +1,66 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-  <meta charset="utf-8">
-  <title>Momentum Widget</title>
-  <style>body{margin:0}</style>
+  <meta charset="UTF-8">
+  <title>Momentum Screener</title>
+
+  <!--
+    CSP: allow inline styles, widget script from Render, and FMP fetches
+  -->
+  <meta http-equiv="Content-Security-Policy"
+        content="
+          default-src 'self';
+          script-src  'self' https://momentum-widget-i6ic.onrender.com;
+          connect-src 'self' https://financialmodelingprep.com https://momentum-widget-i6ic.onrender.com;
+          style-src   'self' 'unsafe-inline';
+          img-src     'self' data:;
+        "
+  />
+
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background: #121212;
+      color: #eee;
+      margin: 2rem;
+    }
+    h1 { margin-bottom: 1rem; }
+    p { margin: 0; padding: 0; }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 1rem;
+    }
+    th, td {
+      padding: 6px 10px;
+      text-align: center;
+      border: 1px solid #333;
+    }
+    th {
+      background: #333;
+      color: #fff;
+    }
+    .no-data {
+      padding: 2rem;
+      text-align: center;
+      color: #ccc;
+    }
+  </style>
 </head>
 <body>
-  <div id="momentum-root"></div>
-  <script src="/momentum-widget.iife.js?bucket=raw"></script>
+
+  <h1>Momentum Screener</h1>
+  <p id="mkt-status"></p>
+  <p id="mkt-note"></p>
+  <p id="mkt-ts"></p>
+
+  <!-- match your JS: this is where tables get injected -->
+  <div id="mkt-tables"></div>
+
+  <!-- load the widget bundle from your Render service -->
+  <script
+    src="https://momentum-widget-i6ic.onrender.com/js/momentum-widget.iife.js"
+    defer
+  ></script>
 </body>
 </html>
