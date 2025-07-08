@@ -12,11 +12,15 @@ const app        = express();
 
 app.use(cors());
 app.use(express.json());
-app.use(express.static(path.join(__dirname, 'public')));
+
+// 1) Mount your JSON API *before* static/fallback
 app.use('/momentum', momentumRouter);
 
-// Fallback for SPA support (if you ever need index.html)
-app.use((req, res) =>
+// 2) Serve any front-end assets from /public
+app.use(express.static(path.join(__dirname, 'public')));
+
+// 3) SPA fallback (for index.html in public)
+app.get('*', (req, res) =>
   res.sendFile(path.join(__dirname, 'public', 'index.html'))
 );
 
